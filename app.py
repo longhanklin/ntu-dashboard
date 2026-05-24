@@ -1,6 +1,5 @@
 import streamlit as st
 from supabase import create_client
-from dotenv import load_dotenv
 import os
 import pandas as pd
 import plotly.express as px
@@ -8,9 +7,17 @@ import folium
 from streamlit_folium import st_folium
 from datetime import datetime
 
-load_dotenv()
+# 讀取環境變數（Streamlit Cloud 用 st.secrets，本機用 .env）
+try:
+    SUPABASE_URL = st.secrets["SUPABASE_URL"]
+    SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+except:
+    from dotenv import load_dotenv
+    load_dotenv()
+    SUPABASE_URL = os.getenv("SUPABASE_URL")
+    SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.set_page_config(
     page_title="台大公館人潮儀表板",
@@ -45,7 +52,7 @@ def load_youbike_history():
     res = supabase.table("youbike_data")\
         .select("*")\
         .order("recorded_at", desc=True)\
-        .limit(2000)\
+        .limit(5000)\
         .execute()
     return pd.DataFrame(res.data)
 
@@ -53,15 +60,23 @@ df_youbike = load_youbike()
 df_weather = load_weather()
 df_history = load_youbike_history()
 
+# 資料庫空的保護
+if df_youbike.empty:
+    st.warning("資料庫目前沒有資料，請稍後再試")
+    st.stop()
+
 # ── 天氣區塊 ──
 st.subheader("🌤 目前天氣")
-df_nearby = df_weather[df_weather["location"].str.contains("臺北|大安|文山|中正")]
-cols = st.columns(len(df_nearby))
-for i, (_, row) in enumerate(df_nearby.iterrows()):
-    with cols[i]:
-        temp = f"{row['temperature']}°C" if row['temperature'] else "無資料"
-        hum = f"{row['humidity']}%" if row['humidity'] else "無資料"
-        st.metric(label=row['location'], value=temp, delta=f"濕度 {hum}")
+
+if not df_weather.empty:
+    df_nearby = df_weather[df_weather["location"].str.contains("臺北|大安|文山|中正", na=False)]
+    if not df_nearby.empty:
+        cols = st.columns(len(df_nearby))
+        for i, (_, row) in enumerate(df_nearby.iterrows()):
+            with cols[i]:
+                temp = f"{row['temperature']}°C" if row['temperature'] else "無資料"
+                hum = f"{row['humidity']}%" if row['humidity'] else "無資料"
+                st.metric(label=row['location'], value=temp, delta=f"濕度 {hum}")
 
 st.divider()
 
@@ -91,25 +106,29 @@ st.divider()
 # ── 趨勢圖 ──
 st.subheader("📈 YouBike 歷史趨勢")
 
-default_stations = stations[:3] if len(stations) >= 3 else stations
+stations = df_history["station_name"].unique().tolist() if not df_history.empty else []
 
-selected = st.multiselect(
-    "選擇站點",
-    options=stations,
-    default=default_stations
-)
-
-if selected:
-    df_selected = df_history[df_history["station_name"].isin(selected)]
-    fig = px.line(
-        df_selected,
-        x="recorded_at",
-        y="available_bikes",
-        color="station_name",
-        title="各站可借車數量趨勢",
-        labels={"recorded_at": "時間", "available_bikes": "可借車數", "station_name": "站點"}
+if stations:
+    default_stations = stations[:3] if len(stations) >= 3 else stations
+    selected = st.multiselect(
+        "選擇站點",
+        options=stations,
+        default=default_stations
     )
-    st.plotly_chart(fig, use_container_width=True)
+
+    if selected:
+        df_selected = df_history[df_history["station_name"].isin(selected)]
+        fig = px.line(
+            df_selected,
+            x="recorded_at",
+            y="available_bikes",
+            color="station_name",
+            title="各站可借車數量趨勢",
+            labels={"recorded_at": "時間", "available_bikes": "可借車數", "station_name": "站點"}
+        )
+        st.plotly_chart(fig, use_container_width=True)
+else:
+    st.info("歷史資料累積中，請稍後再查看趨勢圖")
 
 st.divider()
 
