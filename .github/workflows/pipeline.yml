@@ -1,0 +1,29 @@
+name: Run Pipeline
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'  # 每30分鐘跑一次
+  workflow_dispatch:  # 也可以手動觸發
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install supabase requests livepopulartimes python-dotenv
+
+      - name: Run pipeline
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          CWA_KEY: ${{ secrets.CWA_KEY }}
+        run: python pipeline.py
