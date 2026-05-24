@@ -91,11 +91,12 @@ st.divider()
 # ── 趨勢圖 ──
 st.subheader("📈 YouBike 歷史趨勢")
 
-stations = df_history["station_name"].unique().tolist()
+default_stations = stations[:3] if len(stations) >= 3 else stations
+
 selected = st.multiselect(
     "選擇站點",
     options=stations,
-    default=["YouBike2.0_捷運公館站(3號出口)", "YouBike2.0_第二學生活動中心", "YouBike2.0_臺大資訊大樓"]
+    default=default_stations
 )
 
 if selected:
