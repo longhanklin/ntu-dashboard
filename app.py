@@ -34,7 +34,7 @@ def load_youbike():
     res = supabase.table("youbike_data")\
         .select("*")\
         .order("recorded_at", desc=True)\
-        .limit(82)\
+        .limit(200)\
         .execute()
     return pd.DataFrame(res.data)
 
@@ -52,7 +52,7 @@ def load_youbike_history():
     res = supabase.table("youbike_data")\
         .select("*")\
         .order("recorded_at", desc=True)\
-        .limit(5000)\
+        .limit(10000)\
         .execute()
     return pd.DataFrame(res.data)
 
@@ -64,21 +64,12 @@ if df_youbike.empty:
     st.warning("資料庫目前沒有資料，請稍後再試")
     st.stop()
 
-# ── 用座標判斷台大校內 ──
-# 台大校園邊界（新生南路、辛亥路、基隆路、羅斯福路所圍）
+# ── 用座標判斷台大校內（根據實際座標校正）──
 NTU_BOUNDS = {
-    "lat_min": 25.007,
-    "lat_max": 25.021,
-    "lng_min": 121.532,
-    "lng_max": 121.543,
-}
-
-# 師大公館校區座標範圍
-SHIDA_BOUNDS = {
-    "lat_min": 25.007,
-    "lat_max": 25.013,
-    "lng_min": 121.528,
-    "lng_max": 121.533,
+    "lat_min": 25.0130,
+    "lat_max": 25.0225,
+    "lng_min": 121.5285,
+    "lng_max": 121.5480,
 }
 
 def classify_station(row):
@@ -86,9 +77,6 @@ def classify_station(row):
     if (NTU_BOUNDS["lat_min"] <= lat <= NTU_BOUNDS["lat_max"] and
             NTU_BOUNDS["lng_min"] <= lng <= NTU_BOUNDS["lng_max"]):
         return "台大校內"
-    elif (SHIDA_BOUNDS["lat_min"] <= lat <= SHIDA_BOUNDS["lat_max"] and
-            SHIDA_BOUNDS["lng_min"] <= lng <= SHIDA_BOUNDS["lng_max"]):
-        return "師大公館校區"
     else:
         return "公館周邊"
 
@@ -97,29 +85,36 @@ df_youbike["區域"] = df_youbike.apply(classify_station, axis=1)
 # ── 天氣區塊 ──
 st.subheader("🌤 目前天氣")
 if not df_weather.empty:
-    df_nearby = df_weather[df_weather["location"].str.contains("臺北|大安|文山|中正", na=False)]
-    if not df_nearby.empty:
-        cols = st.columns(len(df_nearby))
-        for i, (_, row) in enumerate(df_nearby.iterrows()):
+    # 固定顯示這幾個最相關的測站，順序固定
+    priority = ["大安區 - 臺灣大學", "中正區 - 臺北", "文山區 - 文山", "大安區 - 大安森林"]
+    df_weather_show = df_weather[df_weather["location"].isin(priority)].copy()
+    df_weather_show["sort"] = df_weather_show["location"].apply(
+        lambda x: priority.index(x) if x in priority else 99
+    )
+    df_weather_show = df_weather_show.sort_values("sort")
+
+    if not df_weather_show.empty:
+        cols = st.columns(len(df_weather_show))
+        for i, (_, row) in enumerate(df_weather_show.iterrows()):
             with cols[i]:
-                temp = f"{row['temperature']}°C" if row['temperature'] else "無資料"
-                hum = f"{row['humidity']}%" if row['humidity'] else "無資料"
-                st.metric(label=row['location'], value=temp, delta=f"濕度 {hum}")
+                temp = row['temperature']
+                hum = row['humidity']
+                temp_str = f"{temp}°C" if temp and temp > 0 else "無資料"
+                hum_str = f"{hum}%" if hum and hum > 0 else "無資料"
+                st.metric(label=row['location'], value=temp_str, delta=f"濕度 {hum_str}")
 
 st.divider()
 
 # ── 地圖 ──
 st.subheader("🗺 YouBike 即時地圖")
 
-# 區域篩選按鈕
-col1, col2, col3, col4 = st.columns(4)
+# 區域篩選
+col1, col2, col3 = st.columns(3)
 with col1:
     show_all = st.button("📍 全部顯示", use_container_width=True)
 with col2:
     show_ntu = st.button("🏫 台大校內", use_container_width=True)
 with col3:
-    show_shida = st.button("🏛 師大公館", use_container_width=True)
-with col4:
     show_public = st.button("🏙 公館周邊", use_container_width=True)
 
 if "map_filter" not in st.session_state:
@@ -129,8 +124,6 @@ if show_all:
     st.session_state.map_filter = "全部"
 elif show_ntu:
     st.session_state.map_filter = "台大校內"
-elif show_shida:
-    st.session_state.map_filter = "師大公館校區"
 elif show_public:
     st.session_state.map_filter = "公館周邊"
 
@@ -145,18 +138,21 @@ total_docks = int(df_map["total_docks"].sum())
 overall_ratio = total_bikes / total_docks * 100 if total_docks > 0 else 0
 
 stat1, stat2, stat3 = st.columns(3)
-stat1.metric("範圍內站點數", f"{len(df_map)} 站")
+stat1.metric("站點數", f"{len(df_map)} 站")
 stat2.metric("可借車總數", f"{total_bikes} 台")
 stat3.metric("整體可借率", f"{overall_ratio:.1f}%")
 
-# 地圖中心根據篩選自動調整
+# 地圖中心根據篩選調整
 map_centers = {
-    "全部": [25.014, 121.537],
-    "台大校內": [25.014, 121.537],
-    "師大公館校區": [25.010, 121.530],
-    "公館周邊": [25.012, 121.533],
+    "全部": [25.016, 121.537],
+    "台大校內": [25.017, 121.537],
+    "公館周邊": [25.014, 121.533],
 }
-zoom_levels = {"全部": 15, "台大校內": 16, "師大公館校區": 16, "公館周邊": 15}
+zoom_levels = {
+    "全部": 15,
+    "台大校內": 16,
+    "公館周邊": 15,
+}
 
 m = folium.Map(
     location=map_centers[current_filter],
@@ -167,6 +163,7 @@ for _, row in df_map.iterrows():
     if row['lat'] and row['lng']:
         ratio = row['available_bikes'] / row['total_docks'] if row['total_docks'] > 0 else 0
         color = "#2ecc71" if ratio > 0.5 else "#f39c12" if ratio > 0.2 else "#e74c3c"
+        name = row['station_name'].replace('YouBike2.0_', '')
 
         folium.CircleMarker(
             location=[row['lat'], row['lng']],
@@ -176,7 +173,7 @@ for _, row in df_map.iterrows():
             fill_color=color,
             fill_opacity=0.85,
             popup=folium.Popup(
-                f"<b>{row['station_name'].replace('YouBike2.0_', '')}</b><br>"
+                f"<b>{name}</b><br>"
                 f"區域：{row['區域']}<br>"
                 f"可借：{row['available_bikes']} 台<br>"
                 f"總格：{row['total_docks']} 格<br>"
@@ -196,14 +193,16 @@ st.subheader("📈 YouBike 歷史趨勢")
 stations = df_history["station_name"].unique().tolist() if not df_history.empty else []
 
 if stations:
-    region_col1, region_col2, region_col3 = st.columns(3)
-    with region_col1:
+    rc1, rc2, rc3 = st.columns(3)
+    with rc1:
         if st.button("⭐ 台大熱門站", use_container_width=True):
-            st.session_state.selected_stations = [s for s in stations if any(k in s for k in ["椰林", "小福", "總圖", "第二學生"])]
-    with region_col2:
+            st.session_state.selected_stations = [
+                s for s in stations if any(k in s for k in ["椰林", "小福", "總圖", "第二學生"])
+            ]
+    with rc2:
         if st.button("🚉 公館捷運站", use_container_width=True):
             st.session_state.selected_stations = [s for s in stations if "公館站" in s]
-    with region_col3:
+    with rc3:
         if st.button("🔄 清除選擇", use_container_width=True):
             st.session_state.selected_stations = stations[:3]
 
@@ -238,13 +237,14 @@ st.subheader("🏆 目前可借車排行")
 
 rank_filter = st.radio(
     "篩選區域",
-    ["全部", "台大校內", "師大公館校區", "公館周邊"],
+    ["全部", "台大校內", "公館周邊"],
     horizontal=True
 )
 
 df_rank = df_youbike.copy() if rank_filter == "全部" else df_youbike[df_youbike["區域"] == rank_filter].copy()
 df_rank["使用率(%)"] = ((df_rank["total_docks"] - df_rank["available_bikes"]) / df_rank["total_docks"] * 100).round(1)
 df_rank = df_rank.sort_values("available_bikes", ascending=False).head(10)
+df_rank["station_name"] = df_rank["station_name"].str.replace("YouBike2.0_", "", regex=False)
 df_rank = df_rank[["station_name", "區域", "available_bikes", "total_docks", "使用率(%)"]]
 df_rank.columns = ["站點", "區域", "可借車數", "總車格", "使用率(%)"]
 st.dataframe(df_rank, use_container_width=True, hide_index=True)
