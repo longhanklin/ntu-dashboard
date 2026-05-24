@@ -4,22 +4,21 @@ from dotenv import load_dotenv
 import os
 
 load_dotenv()
-
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
-# 要的站點關鍵字
-INCLUDE = ["臺大", "公館", "師大公館", "師範大學公館",
-           "羅斯福", "新生南路", "辛亥", "古亭", 
-           "捷運萬隆", "捷運景美", "捷運臺電大樓",
-           "捷運中正紀念堂", "和平", "溫州", "銘傳國小"]
+LAT_MIN = 24.998
+LAT_MAX = 25.028
+LNG_MIN = 121.518
+LNG_MAX = 121.550
 
-EXCLUDE = ["世新", "政治大學", "中國科技", "中華科技", "台北科技",
-           "陽明交通", "國防大學", "德明", "銘傳大學", "東吳",
-           "臺北醫學", "臺北市立大學", "臺北教育", "臺北護理",
-           "臺灣科技大學", "臺灣師範大學", "中國醫藥",
-           "臺大醫院兒童", "臺大醫學院附設癌醫", "捷運臺大醫院",
-           "銘傳大學", "臺灣師範大學", "中國醫藥", "中華科技",
-           "臺大醫院兒童", "臺大醫學院附設癌醫", "捷運臺大醫院"]
+EXCLUDE = [
+    "世新", "政治大學", "中國科技", "中華科技", "台北科技",
+    "陽明交通", "國防大學", "德明", "東吳", "臺北醫學",
+    "臺北市立大學", "臺北教育", "臺北護理", "中國醫藥",
+    "臺大醫院兒童", "捷運臺大醫院", "敦化", "科技大樓站",
+    "臺灣師範大學(浦城街)", "臺靜農",
+    "臺灣師範大學(圖書館)", "臺北遠企", "癌醫中心"
+]
 
 def fetch_youbike():
     print("抓取 YouBike 資料中...")
@@ -28,23 +27,23 @@ def fetch_youbike():
 
     count = 0
     for station in data:
+        lat = float(station.get("latitude", 0))
+        lng = float(station.get("longitude", 0))
         name = station.get("sna", "")
-        addr = station.get("ar", "")
 
-        include = any(k in name for k in INCLUDE)
-        exclude = any(k in name for k in EXCLUDE)
+        in_range = LAT_MIN <= lat <= LAT_MAX and LNG_MIN <= lng <= LNG_MAX
+        excluded = any(k in name for k in EXCLUDE)
 
-        if include and not exclude:
+        if in_range and not excluded:
             supabase.table("youbike_data").insert({
                 "station_name": name,
-                "lat": float(station.get("latitude", 0)),
-                "lng": float(station.get("longitude", 0)),
+                "lat": lat,
+                "lng": lng,
                 "available_bikes": int(station.get("available_rent_bikes", 0)),
                 "total_docks": int(station.get("Quantity", 0)),
                 "recorded_at": station.get("updateTime")
             }).execute()
-
-            print(f"  {name}: 可借{station.get('available_rent_bikes')}台 / 共{station.get('Quantity')}格")
+            print(f"  {name}: 可借{station.get('available_rent_bikes')}台")
             count += 1
 
     print(f"完成！共存入 {count} 個站點")
