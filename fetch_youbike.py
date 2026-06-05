@@ -25,7 +25,8 @@ def fetch_youbike():
     r = requests.get("https://tcgbusfs.blob.core.windows.net/dotapp/youbike/v2/youbike_immediate.json")
     data = r.json()
 
-    count = 0
+    # 先收集所有資料，最後一次批次插入
+    batch = []
     for station in data:
         lat = float(station.get("latitude", 0))
         lng = float(station.get("longitude", 0))
@@ -35,17 +36,16 @@ def fetch_youbike():
         excluded = any(k in name for k in EXCLUDE)
 
         if in_range and not excluded:
-            supabase.table("youbike_data").insert({
+            batch.append({
                 "station_name": name,
                 "lat": lat,
                 "lng": lng,
                 "available_bikes": int(station.get("available_rent_bikes", 0)),
                 "total_docks": int(station.get("Quantity", 0)),
                 "recorded_at": station.get("updateTime")
-            }).execute()
-            print(f"  {name}: 可借{station.get('available_rent_bikes')}台")
-            count += 1
+            })
 
-    print(f"完成！共存入 {count} 個站點")
-
-fetch_youbike()
+    # 一次插入全部
+    if batch:
+        supabase.table("youbike_data").insert(batch).execute()
+        print(f"完成！共存入 {len(batch)} 個站點")
