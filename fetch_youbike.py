@@ -22,7 +22,7 @@ EXCLUDE = [
 
 def fetch_youbike():
     print("抓取 YouBike 資料中...")
-    r = requests.get("https://tcgbusfs.blob.core.windows.net/dotapp/youbike/v2/youbike_immediate.json")
+    r = requests.get("https://tcgbusfs.blob.core.windows.net/dotapp/youbike/v2/youbike_immediate.json", timeout=15)
     data = r.json()
 
     # 先收集所有資料，最後一次批次插入

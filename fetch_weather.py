@@ -10,8 +10,15 @@ CWA_KEY = os.getenv("CWA_KEY")
 def fetch_weather():
     print("抓取天氣資料中...")
     url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001?Authorization={CWA_KEY}"
-    r = requests.get(url)
-    data = r.json()
+    
+    try:
+        r = requests.get(url, timeout=15)  # 15秒 timeout
+        r.raise_for_status()
+        data = r.json()
+    except Exception as e:
+        print(f"天氣 API 連線失敗，跳過：{e}")
+        return  # 跳過，不讓整個 pipeline 崩潰
+
     stations = data["records"]["Station"]
 
     batch = []
@@ -36,3 +43,5 @@ def fetch_weather():
     if batch:
         supabase.table("weather_data").insert(batch).execute()
         print(f"完成！共存入 {len(batch)} 個測站")
+    else:
+        print("沒有資料可存入")

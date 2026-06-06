@@ -25,7 +25,77 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🚲 台大公館人潮儀表板")
+# ── 頂部標題 + 更新按鈕 ──
+col_title, col_btn = st.columns([5, 1])
+with col_title:
+    st.title("🚲 台大公館人潮儀表板")
+with col_btn:
+    st.write("")
+    refresh = st.button("⟳ 立即更新", use_container_width=True)
+
+if refresh:
+    st.cache_data.clear()
+    animation_slot = st.empty()
+    animation_slot.markdown("""
+<div style="display:flex;align-items:center;gap:14px;padding:12px 16px;
+border-radius:12px;border:0.5px solid #e0e0e0;background:#f9f9f9;
+width:fit-content;margin:8px 0;">
+<svg width="64" height="40" viewBox="0 0 64 40" fill="none">
+  <style>
+    @keyframes ws{to{transform:rotate(360deg)}}
+    @keyframes bb{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.5px)}}
+    @keyframes rd{from{stroke-dashoffset:0}to{stroke-dashoffset:-40}}
+    @keyframes ps{to{transform:rotate(360deg)}}
+    #wr{transform-origin:50px 28px;animation:ws 0.5s linear infinite}
+    #wl{transform-origin:14px 28px;animation:ws 0.5s linear infinite}
+    #rider-body{animation:bb 0.5s ease-in-out infinite}
+    #pedal-group{transform-origin:30px 24px;animation:ps 0.5s linear infinite}
+    #road{animation:rd 0.4s linear infinite}
+  </style>
+  <line id="road" x1="0" y1="36" x2="64" y2="36" stroke="#ccc" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <g id="wr">
+    <circle cx="50" cy="28" r="9" stroke="#888" stroke-width="1.5" fill="none"/>
+    <line x1="50" y1="19" x2="50" y2="37" stroke="#888" stroke-width="1"/>
+    <line x1="41" y1="28" x2="59" y2="28" stroke="#888" stroke-width="1"/>
+    <line x1="43.6" y1="21.6" x2="56.4" y2="34.4" stroke="#888" stroke-width="1"/>
+    <line x1="56.4" y1="21.6" x2="43.6" y2="34.4" stroke="#888" stroke-width="1"/>
+  </g>
+  <g id="wl">
+    <circle cx="14" cy="28" r="9" stroke="#888" stroke-width="1.5" fill="none"/>
+    <line x1="14" y1="19" x2="14" y2="37" stroke="#888" stroke-width="1"/>
+    <line x1="5" y1="28" x2="23" y2="28" stroke="#888" stroke-width="1"/>
+    <line x1="7.6" y1="21.6" x2="20.4" y2="34.4" stroke="#888" stroke-width="1"/>
+    <line x1="20.4" y1="21.6" x2="7.6" y2="34.4" stroke="#888" stroke-width="1"/>
+  </g>
+  <line x1="14" y1="28" x2="28" y2="14" stroke="#888" stroke-width="1.5"/>
+  <line x1="28" y1="14" x2="50" y2="28" stroke="#888" stroke-width="1.5"/>
+  <line x1="28" y1="14" x2="30" y2="28" stroke="#888" stroke-width="1.5"/>
+  <line x1="24" y1="14" x2="34" y2="14" stroke="#888" stroke-width="2" stroke-linecap="round"/>
+  <line x1="28" y1="14" x2="24" y2="10" stroke="#888" stroke-width="1.5"/>
+  <line x1="22" y1="10" x2="27" y2="10" stroke="#888" stroke-width="2" stroke-linecap="round"/>
+  <g id="rider-body">
+    <circle cx="30" cy="5" r="3.5" fill="#555"/>
+    <line x1="30" y1="8.5" x2="28" y2="16" stroke="#555" stroke-width="1.5"/>
+    <line x1="28" y1="16" x2="24" y2="19" stroke="#555" stroke-width="1.5"/>
+    <line x1="28" y1="16" x2="34" y2="14" stroke="#555" stroke-width="1.5"/>
+    <g id="pedal-group">
+      <line x1="30" y1="24" x2="25" y2="30" stroke="#555" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="30" y1="24" x2="35" y2="30" stroke="#555" stroke-width="1.5" stroke-linecap="round"/>
+      <circle cx="30" cy="24" r="2" fill="#555"/>
+    </g>
+  </g>
+</svg>
+<div>
+  <div style="font-size:14px;font-weight:500;color:#333;">玩命抓取即時資料中</div>
+  <div style="font-size:12px;color:#888;margin-top:2px;">請稍後，正在更新所有站點...</div>
+</div>
+</div>
+""", unsafe_allow_html=True)
+    import time
+    time.sleep(1)
+    animation_slot.empty()
+    st.success("✅ 資料已是最新狀態！")
+
 st.caption(f"資料每30分鐘自動更新｜最後載入：{datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
 # ── 讀取資料 ──
@@ -64,7 +134,7 @@ if df_youbike.empty:
     st.warning("資料庫目前沒有資料，請稍後再試")
     st.stop()
 
-# ── 用座標判斷台大校內（根據實際座標校正）──
+# ── 台大校內判斷 ──
 NTU_BOUNDS = {
     "lat_min": 25.0130,
     "lat_max": 25.0225,
@@ -85,7 +155,6 @@ df_youbike["區域"] = df_youbike.apply(classify_station, axis=1)
 # ── 天氣區塊 ──
 st.subheader("🌤 目前天氣")
 if not df_weather.empty:
-    # 固定顯示這幾個最相關的測站，順序固定
     priority = ["大安區 - 臺灣大學", "中正區 - 臺北", "文山區 - 文山", "大安區 - 大安森林"]
     df_weather_show = df_weather[df_weather["location"].isin(priority)].copy()
     df_weather_show["sort"] = df_weather_show["location"].apply(
@@ -99,8 +168,8 @@ if not df_weather.empty:
             with cols[i]:
                 temp = row['temperature']
                 hum = row['humidity']
-                temp_str = f"{temp}°C" if temp and temp > 0 else "無資料"
-                hum_str = f"{hum}%" if hum and hum > 0 else "無資料"
+                temp_str = f"{temp}°C" if temp and float(temp) > 0 else "無資料"
+                hum_str = f"{hum}%" if hum and float(hum) > 0 else "無資料"
                 st.metric(label=row['location'], value=temp_str, delta=f"濕度 {hum_str}")
 
 st.divider()
@@ -108,7 +177,6 @@ st.divider()
 # ── 地圖 ──
 st.subheader("🗺 YouBike 即時地圖")
 
-# 區域篩選
 col1, col2, col3 = st.columns(3)
 with col1:
     show_all = st.button("📍 全部顯示", use_container_width=True)
@@ -132,7 +200,6 @@ st.caption(f"目前顯示：**{current_filter}**")
 
 df_map = df_youbike if current_filter == "全部" else df_youbike[df_youbike["區域"] == current_filter]
 
-# 統計
 total_bikes = int(df_map["available_bikes"].sum())
 total_docks = int(df_map["total_docks"].sum())
 overall_ratio = total_bikes / total_docks * 100 if total_docks > 0 else 0
@@ -142,22 +209,14 @@ stat1.metric("站點數", f"{len(df_map)} 站")
 stat2.metric("可借車總數", f"{total_bikes} 台")
 stat3.metric("整體可借率", f"{overall_ratio:.1f}%")
 
-# 地圖中心根據篩選調整
 map_centers = {
     "全部": [25.016, 121.537],
     "台大校內": [25.017, 121.537],
     "公館周邊": [25.014, 121.533],
 }
-zoom_levels = {
-    "全部": 15,
-    "台大校內": 16,
-    "公館周邊": 15,
-}
+zoom_levels = {"全部": 15, "台大校內": 16, "公館周邊": 15}
 
-m = folium.Map(
-    location=map_centers[current_filter],
-    zoom_start=zoom_levels[current_filter]
-)
+m = folium.Map(location=map_centers[current_filter], zoom_start=zoom_levels[current_filter])
 
 for _, row in df_map.iterrows():
     if row['lat'] and row['lng']:
