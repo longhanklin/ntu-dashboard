@@ -25,7 +25,9 @@ st.set_page_config(
     layout="wide"
 )
 
-# ── 頂部標題 + 更新按鈕 ──
+import requests as req
+import time
+
 col_title, col_btn = st.columns([5, 1])
 with col_title:
     st.title("🚲 台大公館人潮儀表板")
@@ -34,9 +36,26 @@ with col_btn:
     refresh = st.button("⟳ 立即更新", use_container_width=True)
 
 if refresh:
-    st.cache_data.clear()
-    animation_slot = st.empty()
-    animation_slot.markdown("""
+    # 觸發 GitHub Actions
+    try:
+        GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
+    except:
+        from dotenv import load_dotenv
+        load_dotenv()
+        GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+
+    trigger_res = req.post(
+        "https://api.github.com/repos/longhanklin/ntu-dashboard/actions/workflows/pipeline.yml/dispatches",
+        headers={
+            "Authorization": f"Bearer {GITHUB_TOKEN}",
+            "Accept": "application/vnd.github+json"
+        },
+        json={"ref": "master"}
+    )
+
+    if trigger_res.status_code == 204:
+        animation_slot = st.empty()
+        animation_slot.markdown("""
 <div style="display:flex;align-items:center;gap:14px;padding:12px 16px;
 border-radius:12px;border:0.5px solid #e0e0e0;background:#f9f9f9;
 width:fit-content;margin:8px 0;">
@@ -87,14 +106,16 @@ width:fit-content;margin:8px 0;">
 </svg>
 <div>
   <div style="font-size:14px;font-weight:500;color:#333;">玩命抓取即時資料中</div>
-  <div style="font-size:12px;color:#888;margin-top:2px;">請稍後，正在更新所有站點...</div>
+  <div style="font-size:12px;color:#888;margin-top:2px;">已觸發更新，約20秒後完成...</div>
 </div>
 </div>
 """, unsafe_allow_html=True)
-    import time
-    time.sleep(1)
-    animation_slot.empty()
-    st.success("✅ 資料已是最新狀態！")
+        time.sleep(25)
+        animation_slot.empty()
+        st.cache_data.clear()
+        st.success("✅ 資料已是最新狀態！")
+    else:
+        st.error(f"觸發失敗：{trigger_res.status_code}，請稍後再試")
 
 st.caption(f"資料每30分鐘自動更新｜最後載入：{datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
