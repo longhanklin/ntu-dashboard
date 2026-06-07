@@ -1,9 +1,7 @@
 name: Run Pipeline
 
 on:
-  schedule:
-    - cron: '*/30 * * * *'
-  workflow_dispatch:
+  workflow_dispatch:  # 只保留手動觸發
 
 jobs:
   run-pipeline:
