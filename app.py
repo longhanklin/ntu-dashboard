@@ -179,10 +179,10 @@ latest_time = None
 if not df_youbike.empty and "recorded_at" in df_youbike.columns:
     latest_raw = df_youbike["recorded_at"].max()
     try:
-        latest_dt = datetime.fromisoformat(latest_raw.replace("Z", "+00:00"))
-        latest_time = latest_dt.astimezone(TW_TZ).strftime('%Y-%m-%d %H:%M')
+        latest_dt = datetime.fromisoformat(latest_raw)
+        latest_time = latest_dt.strftime('%Y-%m-%d %H:%M')
     except:
-        latest_time = latest_raw
+        latest_time = str(latest_raw)[:16]
 
 st.caption(f"資料每30分鐘自動更新｜資料時間：{latest_time or '讀取中...'}")
 
