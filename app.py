@@ -142,18 +142,6 @@ with col_btn:
 
 pipeline_status_watcher()
 
-# 從資料庫最新一筆 YouBike 資料取得抓取時間
-latest_time = None
-if not df_youbike.empty and "recorded_at" in df_youbike.columns:
-    latest_raw = df_youbike["recorded_at"].max()
-    try:
-        latest_dt = datetime.fromisoformat(latest_raw.replace("Z", "+00:00"))
-        latest_time = latest_dt.astimezone(TW_TZ).strftime('%Y-%m-%d %H:%M')
-    except:
-        latest_time = latest_raw
-
-st.caption(f"資料每30分鐘自動更新｜資料時間：{latest_time or '讀取中...'}")
-
 # ── 讀取資料（不快取，永遠抓最新）──
 def load_youbike():
     res = supabase.table("youbike_data")\
@@ -186,6 +174,17 @@ df_history = load_youbike_history()
 if df_youbike.empty:
     st.warning("資料庫目前沒有資料，請稍後再試")
     st.stop()
+
+latest_time = None
+if not df_youbike.empty and "recorded_at" in df_youbike.columns:
+    latest_raw = df_youbike["recorded_at"].max()
+    try:
+        latest_dt = datetime.fromisoformat(latest_raw.replace("Z", "+00:00"))
+        latest_time = latest_dt.astimezone(TW_TZ).strftime('%Y-%m-%d %H:%M')
+    except:
+        latest_time = latest_raw
+
+st.caption(f"資料每30分鐘自動更新｜資料時間：{latest_time or '讀取中...'}")
 
 # ── 台大校內判斷 ──
 NTU_BOUNDS = {
