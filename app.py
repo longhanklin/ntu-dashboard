@@ -157,8 +157,9 @@ def load_weather():
         .execute()
     return pd.DataFrame(res.data)
 
+# ✅ 修正：cutoff 改用 UTC 時間，避免與資料庫時區不一致
 def load_youbike_history(hours=24):
-    cutoff = (datetime.now() - timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
     res = supabase.table("youbike_data")\
         .select("station_name, available_bikes, recorded_at")\
         .gte("recorded_at", cutoff)\
@@ -304,7 +305,6 @@ time_range = st.radio(
 hours_map = {"過去1小時": 1, "過去6小時": 6, "過去12小時": 12, "過去24小時": 24}
 hours = hours_map[time_range]
 
-# 根據選擇的時間範圍從資料庫撈資料
 df_history = load_youbike_history(hours=hours)
 stations = df_history["station_name"].unique().tolist() if not df_history.empty else []
 
@@ -333,7 +333,8 @@ if stations:
 
     if selected:
         df_selected = df_history[df_history["station_name"].isin(selected)].copy()
-        df_selected["recorded_at"] = pd.to_datetime(df_selected["recorded_at"])
+        # ✅ 修正：解析時保留時區資訊（utc=True），避免 naive/aware 混用
+        df_selected["recorded_at"] = pd.to_datetime(df_selected["recorded_at"], utc=True)
         df_selected["站點"] = df_selected["station_name"].str.replace("YouBike2.0_", "", regex=False)
 
         fig = px.line(
@@ -344,7 +345,9 @@ if stations:
             title=f"各站可借車數量趨勢（{time_range}）",
             labels={"recorded_at": "時間", "available_bikes": "可借車數"}
         )
-        now = datetime.now()
+
+        # ✅ 修正：now 改用 UTC 時區，與資料時區一致
+        now = datetime.now(timezone.utc)
         x_start = now - timedelta(hours=hours)
 
         fig.update_layout(
@@ -357,7 +360,7 @@ if stations:
             yaxis=dict(rangemode="nonnegative"),
             hovermode="x unified"
         )
-        
+
         st.plotly_chart(fig, use_container_width=True)
 else:
     st.info("歷史資料累積中，請稍後再查看趨勢圖")
