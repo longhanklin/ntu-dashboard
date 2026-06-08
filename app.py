@@ -86,12 +86,11 @@ width:fit-content;margin:8px 0;">
 </div>
 """
 
-# ── fragment：輪詢 Actions 狀態，每5秒更新一次 ──
+# ── fragment：輪詢 Actions 狀態 ──
 @st.fragment(run_every=5)
 def pipeline_status_watcher():
     if not st.session_state.get("pipeline_running"):
         return
-
     try:
         runs_res = req.get(
             "https://api.github.com/repos/longhanklin/ntu-dashboard/actions/runs?per_page=1",
@@ -104,8 +103,7 @@ def pipeline_status_watcher():
         if runs_res.status_code == 200:
             runs = runs_res.json().get("workflow_runs", [])
             if runs:
-                latest = runs[0]
-                status = latest.get("status")
+                status = runs[0].get("status")
                 if status == "completed":
                     st.session_state.pipeline_running = False
                     st.cache_data.clear()
@@ -142,7 +140,7 @@ with col_btn:
 
 pipeline_status_watcher()
 
-# ── 讀取資料（不快取，永遠抓最新）──
+# ── 讀取資料 ──
 def load_youbike():
     res = supabase.table("youbike_data")\
         .select("*")\
@@ -159,32 +157,31 @@ def load_weather():
         .execute()
     return pd.DataFrame(res.data)
 
-def load_youbike_history():
+def load_youbike_history(hours=24):
+    cutoff = (datetime.now() - timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
     res = supabase.table("youbike_data")\
-        .select("*")\
-        .order("recorded_at", desc=True)\
-        .limit(60000)\
+        .select("station_name, available_bikes, recorded_at")\
+        .gte("recorded_at", cutoff)\
+        .order("recorded_at", desc=False)\
         .execute()
     return pd.DataFrame(res.data)
 
 df_youbike = load_youbike()
 df_weather = load_weather()
-df_history = load_youbike_history()
 
 if df_youbike.empty:
     st.warning("資料庫目前沒有資料，請稍後再試")
     st.stop()
 
+# ── 資料時間顯示 ──
 latest_time = None
-if not df_youbike.empty and "recorded_at" in df_youbike.columns:
+if "recorded_at" in df_youbike.columns:
     latest_raw = df_youbike["recorded_at"].max()
     try:
-        latest_dt = datetime.fromisoformat(latest_raw)
-        latest_time = latest_dt.strftime('%Y-%m-%d %H:%M')
-    except:
         latest_time = str(latest_raw)[:16]
-
-st.caption(f"資料每30分鐘自動更新｜資料時間：{latest_time or '讀取中...'}")
+    except:
+        latest_time = None
+st.caption(f"資料每5分鐘自動更新｜資料時間：{latest_time or '讀取中...'}")
 
 # ── 台大校內判斷 ──
 NTU_BOUNDS = {
@@ -213,7 +210,6 @@ if not df_weather.empty:
         lambda x: priority.index(x) if x in priority else 99
     )
     df_weather_show = df_weather_show.sort_values("sort")
-
     if not df_weather_show.empty:
         cols = st.columns(len(df_weather_show))
         for i, (_, row) in enumerate(df_weather_show.iterrows()):
@@ -239,7 +235,6 @@ with col3:
 
 if "map_filter" not in st.session_state:
     st.session_state.map_filter = "全部"
-
 if show_all:
     st.session_state.map_filter = "全部"
 elif show_ntu:
@@ -275,7 +270,6 @@ for _, row in df_map.iterrows():
         ratio = row['available_bikes'] / row['total_docks'] if row['total_docks'] > 0 else 0
         color = "#2ecc71" if ratio > 0.5 else "#f39c12" if ratio > 0.2 else "#e74c3c"
         name = row['station_name'].replace('YouBike2.0_', '')
-
         folium.CircleMarker(
             location=[row['lat'], row['lng']],
             radius=9,
@@ -301,20 +295,20 @@ st.divider()
 # ── 趨勢圖 ──
 st.subheader("📈 YouBike 歷史趨勢")
 
+time_range = st.radio(
+    "顯示時間範圍",
+    ["過去1小時", "過去6小時", "過去12小時", "過去24小時"],
+    horizontal=True,
+    index=2
+)
+hours_map = {"過去1小時": 1, "過去6小時": 6, "過去12小時": 12, "過去24小時": 24}
+hours = hours_map[time_range]
+
+# 根據選擇的時間範圍從資料庫撈資料
+df_history = load_youbike_history(hours=hours)
 stations = df_history["station_name"].unique().tolist() if not df_history.empty else []
 
 if stations:
-    # 時間範圍選擇
-    time_range = st.radio(
-        "顯示時間範圍",
-        ["過去1小時", "過去6小時", "過去12小時", "過去24小時"],
-        horizontal=True,
-        index=2
-    )
-
-    hours_map = {"過去1小時": 1, "過去6小時": 6, "過去12小時": 12, "過去24小時": 24}
-    hours = hours_map[time_range]
-
     rc1, rc2, rc3 = st.columns(3)
     with rc1:
         if st.button("⭐ 台大熱門站", use_container_width=True):
@@ -337,40 +331,26 @@ if stations:
         default=[s for s in st.session_state.selected_stations if s in stations]
     )
 
-    if selected and not df_history.empty:
+    if selected:
         df_selected = df_history[df_history["station_name"].isin(selected)].copy()
         df_selected["recorded_at"] = pd.to_datetime(df_selected["recorded_at"])
+        df_selected["站點"] = df_selected["station_name"].str.replace("YouBike2.0_", "", regex=False)
 
-        # 依時間範圍篩選
-        cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=hours)
-        if df_selected["recorded_at"].dt.tz is None:
-            cutoff = pd.Timestamp.now() - pd.Timedelta(hours=hours)
-        df_selected = df_selected[df_selected["recorded_at"] >= cutoff]
-
-        if df_selected.empty:
-            st.info(f"過去{hours}小時內沒有資料，請選擇更長的時間範圍")
-        else:
-            # 站名去掉 YouBike2.0_ 前綴
-            df_selected["站點"] = df_selected["station_name"].str.replace("YouBike2.0_", "", regex=False)
-
-            fig = px.line(
-                df_selected,
-                x="recorded_at",
-                y="available_bikes",
-                color="站點",
-                title=f"各站可借車數量趨勢（{time_range}）",
-                labels={"recorded_at": "時間", "available_bikes": "可借車數"}
-            )
-            fig.update_layout(
-                legend=dict(orientation="h", yanchor="bottom", y=1.02),
-                xaxis=dict(
-                    tickformat="%H:%M\n%m/%d",
-                    showgrid=True,
-                ),
-                yaxis=dict(rangemode="tozero"),
-                hovermode="x unified"
-            )
-            st.plotly_chart(fig, use_container_width=True)
+        fig = px.line(
+            df_selected,
+            x="recorded_at",
+            y="available_bikes",
+            color="站點",
+            title=f"各站可借車數量趨勢（{time_range}）",
+            labels={"recorded_at": "時間", "available_bikes": "可借車數"}
+        )
+        fig.update_layout(
+            legend=dict(orientation="h", yanchor="bottom", y=1.02),
+            xaxis=dict(tickformat="%H:%M\n%m/%d", showgrid=True),
+            yaxis=dict(rangemode="nonnegative"),
+            hovermode="x unified"
+        )
+        st.plotly_chart(fig, use_container_width=True)
 else:
     st.info("歷史資料累積中，請稍後再查看趨勢圖")
 
