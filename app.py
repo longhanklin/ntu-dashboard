@@ -163,7 +163,7 @@ def load_youbike_history():
     res = supabase.table("youbike_data")\
         .select("*")\
         .order("recorded_at", desc=True)\
-        .limit(10000)\
+        .limit(60000)\
         .execute()
     return pd.DataFrame(res.data)
 
@@ -304,6 +304,17 @@ st.subheader("📈 YouBike 歷史趨勢")
 stations = df_history["station_name"].unique().tolist() if not df_history.empty else []
 
 if stations:
+    # 時間範圍選擇
+    time_range = st.radio(
+        "顯示時間範圍",
+        ["過去1小時", "過去6小時", "過去12小時", "過去24小時"],
+        horizontal=True,
+        index=2
+    )
+
+    hours_map = {"過去1小時": 1, "過去6小時": 6, "過去12小時": 12, "過去24小時": 24}
+    hours = hours_map[time_range]
+
     rc1, rc2, rc3 = st.columns(3)
     with rc1:
         if st.button("⭐ 台大熱門站", use_container_width=True):
@@ -326,18 +337,40 @@ if stations:
         default=[s for s in st.session_state.selected_stations if s in stations]
     )
 
-    if selected:
-        df_selected = df_history[df_history["station_name"].isin(selected)]
-        fig = px.line(
-            df_selected,
-            x="recorded_at",
-            y="available_bikes",
-            color="station_name",
-            title="各站可借車數量趨勢",
-            labels={"recorded_at": "時間", "available_bikes": "可借車數", "station_name": "站點"}
-        )
-        fig.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02))
-        st.plotly_chart(fig, use_container_width=True)
+    if selected and not df_history.empty:
+        df_selected = df_history[df_history["station_name"].isin(selected)].copy()
+        df_selected["recorded_at"] = pd.to_datetime(df_selected["recorded_at"])
+
+        # 依時間範圍篩選
+        cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=hours)
+        if df_selected["recorded_at"].dt.tz is None:
+            cutoff = pd.Timestamp.now() - pd.Timedelta(hours=hours)
+        df_selected = df_selected[df_selected["recorded_at"] >= cutoff]
+
+        if df_selected.empty:
+            st.info(f"過去{hours}小時內沒有資料，請選擇更長的時間範圍")
+        else:
+            # 站名去掉 YouBike2.0_ 前綴
+            df_selected["站點"] = df_selected["station_name"].str.replace("YouBike2.0_", "", regex=False)
+
+            fig = px.line(
+                df_selected,
+                x="recorded_at",
+                y="available_bikes",
+                color="站點",
+                title=f"各站可借車數量趨勢（{time_range}）",
+                labels={"recorded_at": "時間", "available_bikes": "可借車數"}
+            )
+            fig.update_layout(
+                legend=dict(orientation="h", yanchor="bottom", y=1.02),
+                xaxis=dict(
+                    tickformat="%H:%M\n%m/%d",
+                    showgrid=True,
+                ),
+                yaxis=dict(rangemode="tozero"),
+                hovermode="x unified"
+            )
+            st.plotly_chart(fig, use_container_width=True)
 else:
     st.info("歷史資料累積中，請稍後再查看趨勢圖")
 
