@@ -346,10 +346,13 @@ if stations:
             labels={"recorded_at": "時間", "available_bikes": "可借車數"}
         )
 
-        # ✅ 以最新資料時間為錨點，右邊留 1/4 空間，資料落在圖的右 3/4 處
-        last_ts = df_selected["recorded_at"].max()
-        right_edge = last_ts + timedelta(hours=hours / 4)
-        left_edge  = right_edge - timedelta(hours=hours)
+        # ✅ 依實際資料範圍定軸，兩側各留 10% padding
+        first_ts   = df_selected["recorded_at"].min()
+        last_ts    = df_selected["recorded_at"].max()
+        data_span  = last_ts - first_ts
+        padding    = max(data_span * 0.1, timedelta(minutes=15))
+        left_edge  = first_ts - padding
+        right_edge = last_ts  + padding
 
         fig.update_layout(
             legend=dict(orientation="h", yanchor="bottom", y=1.02),
