@@ -1,6 +1,7 @@
 import requests
 from supabase import create_client
 from dotenv import load_dotenv
+from datetime import datetime, timezone
 import os
 
 load_dotenv()
@@ -25,7 +26,9 @@ def fetch_youbike():
     r = requests.get("https://tcgbusfs.blob.core.windows.net/dotapp/youbike/v2/youbike_immediate.json", timeout=15)
     data = r.json()
 
-    # 先收集所有資料，最後一次批次插入
+    # ✅ 修正：用 pipeline 執行當下的 UTC 時間，同一批次所有站點共用同一時間戳
+    now = datetime.now(timezone.utc).isoformat()
+
     batch = []
     for station in data:
         lat = float(station.get("latitude", 0))
@@ -42,10 +45,9 @@ def fetch_youbike():
                 "lng": lng,
                 "available_bikes": int(station.get("available_rent_bikes", 0)),
                 "total_docks": int(station.get("Quantity", 0)),
-                "recorded_at": station.get("updateTime")
+                "recorded_at": now   # ✅ 統一用 UTC 時間，不用站點的 updateTime
             })
 
-    # 一次插入全部
     if batch:
         supabase.table("youbike_data").insert(batch).execute()
         print(f"完成！共存入 {len(batch)} 個站點")
