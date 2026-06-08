@@ -346,16 +346,17 @@ if stations:
             labels={"recorded_at": "時間", "available_bikes": "可借車數"}
         )
 
-        # ✅ 修正：now 改用 UTC 時區，與資料時區一致
-        now = datetime.now(timezone.utc)
-        x_start = now - timedelta(hours=hours)
+        # ✅ 以最新資料時間為錨點，右邊留 1/4 空間，資料落在圖的右 3/4 處
+        last_ts = df_selected["recorded_at"].max()
+        right_edge = last_ts + timedelta(hours=hours / 4)
+        left_edge  = right_edge - timedelta(hours=hours)
 
         fig.update_layout(
             legend=dict(orientation="h", yanchor="bottom", y=1.02),
             xaxis=dict(
                 tickformat="%H:%M\n%m/%d",
                 showgrid=True,
-                range=[x_start, now]
+                range=[left_edge, right_edge]
             ),
             yaxis=dict(rangemode="nonnegative"),
             hovermode="x unified"
