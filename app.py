@@ -160,10 +160,12 @@ def load_weather():
 # ✅ 修正：cutoff 改用 UTC 時間，避免與資料庫時區不一致
 def load_youbike_history(hours=24):
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # 190 站 x 每30分鐘一筆 x 24小時 ≈ 9120 筆，設 10000 確保不被截斷
     res = supabase.table("youbike_data")\
         .select("station_name, available_bikes, recorded_at")\
         .gte("recorded_at", cutoff)\
         .order("recorded_at", desc=False)\
+        .limit(10000)\
         .execute()
     return pd.DataFrame(res.data)
 
