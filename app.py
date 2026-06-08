@@ -344,12 +344,20 @@ if stations:
             title=f"各站可借車數量趨勢（{time_range}）",
             labels={"recorded_at": "時間", "available_bikes": "可借車數"}
         )
+        now = datetime.now()
+        x_start = now - timedelta(hours=hours)
+
         fig.update_layout(
             legend=dict(orientation="h", yanchor="bottom", y=1.02),
-            xaxis=dict(tickformat="%H:%M\n%m/%d", showgrid=True),
+            xaxis=dict(
+                tickformat="%H:%M\n%m/%d",
+                showgrid=True,
+                range=[x_start, now]
+            ),
             yaxis=dict(rangemode="nonnegative"),
             hovermode="x unified"
         )
+        
         st.plotly_chart(fig, use_container_width=True)
 else:
     st.info("歷史資料累積中，請稍後再查看趨勢圖")
